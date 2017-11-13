@@ -49,12 +49,15 @@ class tools {
 		this.tag = tag;
 	}
 	is_ip (ip){
-		let tmp = ip.split('.');
-		if(tmp.length != 4){
+		if(typeof ip !== "string"){
 			return false;
 		}
-		for(let i in tmp){
-			if(Number(tmp[i]) < 0 || Number(tmp[i]) > 255){
+		let tmp = ip.split('.');
+		if(tmp.length !== 4){
+			return false;
+		}
+		for(let i of tmp){
+			if(Number(i) < 0 || Number(i) > 255){
 				return false;
 			}
 		}
@@ -62,6 +65,9 @@ class tools {
 	}
 
 	is_empty_obj (obj){
+		if(typeof obj !== "object"){
+			return false;
+		}
 		for(let i in obj){
 			return true;
 		}

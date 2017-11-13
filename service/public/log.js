@@ -9,21 +9,27 @@ global.LOG_LEVEL = {
 	ERROR : 4,
 	FATAL : 5
 };
+
 global.SYSTEM = process.platform;
 global.DEFAULT_STACK_SIZE = 3;
 
 class log {
-	constructor(level,stack_size){
-		this._level = level || LOG_LEVEL.INFO;
-		this._stack_size = stack_size || DEFAULT_STACK_SIZE;
+	constructor(config){
+		this._level = (config && config.level) || LOG_LEVEL.INFO;
+		this._stack_size = (config && config.level) || DEFAULT_STACK_SIZE;
+		this._bstack = config && config.bstack !== undefined ? config.bstack : false;
 	}
 
-	_init(level,stack_size){
-		this._level = level || LOG_LEVEL.DEBUG;
-		this._stack_size = stack_size || DEFAULT_STACK_SIZE;
+	_init(config){
+		this._level = (config && config.level) || LOG_LEVEL.INFO;
+		this._stack_size = (config && config.level) || DEFAULT_STACK_SIZE;
+		this._bstack = config && config.bstack !== undefined ? config.bstack : false;
 	}
 
 	_stack(){
+		if(!this._bstack){
+			return "";
+		}
 		let stack_array = (new Error()).stack.split("\n");
 		let tmp = '';
 		let bhas = false;
@@ -102,11 +108,11 @@ class log {
 }
 
 var _instance = null;
-module.exports = function(level,stack_size){
+module.exports = function(config){
 	if(_instance === null){
-		_instance = new log(level,stack_size);
+		_instance = new log(config);
 	}else{
-		_instance._init(level,stack_size);
+		_instance._init(config);
 	}
 	return _instance;
 };

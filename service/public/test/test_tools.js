@@ -1,1 +1,0 @@
-const tools = require('../tools')();
