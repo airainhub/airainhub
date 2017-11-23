@@ -1,16 +1,10 @@
-
-README
-===========================
-www.airainhub.com;learn restful api;
-
 ****
-	
-|Author|airainhub|
-|---|---
-|E-mail|23395306@qq.com
+    Author :    airainhub
+    Email  :    23395306@qq.com
 
-# @[http://www.airainhub.com](http://www.airainhub.com "airainhub")
+# @[www.airainhub.com](http://www.airainhub.com "airainhub")
 > v1.0
+    The beginning of the project is to learn restful api.
 
 ## dir
 * /public   tools
