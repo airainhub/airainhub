@@ -1,13 +1,14 @@
+
 const config = require('../config');
 const mysql = require('../../public/mysql')(config.mysql);
-const log = require('../public/log')({
+const log = require('../../public/log')({
     level : config && config.debug?LOG_LEVEL.DEBUG : LOG_LEVEL.INFO,
     stack_size : config && config.log && config.log.stack_size ? config.log.stack_size : 3,
     bstack : config && config.debug?true:false,
 });
-const tools = require('../public/tools')();
+const tools = require('../../public/tools')();
 
-var TABALE_NAME = "users";
+const TABALE_NAME = "users";
 
 global.USER_STATE = {
     NORMAL :　1,//正常
@@ -15,6 +16,7 @@ global.USER_STATE = {
     DISABLED : -1,//禁用【封号】
     DROP : -2//注销账号
 };
+
 global.IS_USER_STATE = function(state){
     if(state === undefined){
         return false;
@@ -26,8 +28,10 @@ global.IS_USER_STATE = function(state){
     }
     return false;
 };
+
 class User {
     constructor(){
+        let self = this;
         mysql.exec(`show tables like '${TABALE_NAME}'`,function(err,res){
             if(err){
                 log.fatal(`mysql show table '${TABALE_NAME}' fail:${JSON.stringify(err)}`);
@@ -35,7 +39,7 @@ class User {
             }else{
                 if(res.length == 0){
                     let sql = `create table ${TABALE_NAME}(
-                            id int auto_increment primary key,
+                            id int(11) auto_increment primary key,
                             state int default 1,
                             phone varchar(32) not null,
                             password varchar(32) not null,
@@ -56,42 +60,113 @@ class User {
                     });
                     return;
                 }
-                this._cache = {};
+                self._cache = {};
                 mysql.exec(`select * from ${TABALE_NAME};`,function(err,res){
                     if(err){
                         log.fatal(`init ${TABALE_NAME} mysql err:${JSON.stringify(err)}`);
                         process.exit(0);
                     }else{
                         for(let u of res){
-                            this._tocache(u);
+                            self._tocache(u);
                         }
-                        log.info(`init ${TABALE_NAME} info complete.sum:${this.sum}`);
+                        log.info(`init ${TABALE_NAME} info complete.`);
                     }
                 });
             }
         });
+        self.__INIT_INTERFACE();
     }
 
     _tochae(u){
-        if(u && u.id){
-            this._cache[u.id] = u;
+        if(u && u.phone){
+            this._cache[u.phone] = u;
         }
     }
-
-    _has_phone(p,id){
-        for(let u of this._cache){
-            if(u.phone === p){
-                if(id !== undefined && u.id === id){
-                    continue;
+    __INIT_INTERFACE(){
+        let self = this;
+        if(self._interface){
+            return;
+        }
+        self._interface = new Map();
+        self._interface.set(`/:phone`,{
+            //body err
+            get : function(cb,p,body){//浏览
+                let user = self.get(p.phone);
+                if(!user){
+                    let err = {
+                        code : API_CODE.fail,
+                        message : 'unknown user'
+                    };
+                    cb(err,err.message);
+                    return;
                 }
-                return true;
+                cb(user,null);
+            },
+            post : function(cb,p,body){//插入
+                body.phone = p.phone;
+                self.add(body,function(err){
+                    if(err){
+                        cb({
+                            code : API_CODE.fail,
+                            message : err
+                        },err);
+                        return;
+                    }
+                    cb({code : 0}); 
+                });
+            },
+            put : function(cb,p,body){//更新
+                body.phone = p.phone;
+                self.udpate(body,function(err){
+                    if(err){
+                        cb({
+                            code : API_CODE.fail,
+                            message : err
+                        },err);
+                        return;
+                    }
+                    cb({code : 0}); 
+                });
+            },
+            del : function(cb,p,body){//删除
+                self.del(p.phone,function(err){
+                    if(err){
+                        cb({
+                            code : API_CODE.fail,
+                            message : err
+                        },err);
+                        return;
+                    }
+                    cb({code : 0}); 
+                });
             }
-        }
-        return false;
+        });
+    }
+    __GETALL(){
+        return this._cache;
     }
 
-    get(id){
-        return this._cache[id] ? this._cache[id] :null; 
+    get(phone){
+        return this._cache[phone] ? this._cache[phone] : null; 
+    }
+
+    del(phone,callback){
+        if(!phone){
+            callback('missing params');
+            return;
+        }
+        if(!this.get(phone)){
+            callback('unkown user');
+            return;
+        }
+        var sql = `delete from ${TABLE_NAME} where phone=${mysql.escape(phone)};`;
+        mysql.exec(sql,function(err){
+            if(err){
+                callback(`user.del db err:${JSON.stringify(err)};sql:${sql}`);
+                return;
+            }
+            callback();
+        });
     }
 
     add(info,callback){
@@ -103,25 +178,29 @@ class User {
             callback('invalid params');
             return;
         }
+
         if(!tools.is_phone_number(info.phone)){
             callback('invalid phone number');
             return;
         }
-        if(this._has_phone(info.phone)){
+
+        if(this.get(info.phone)){
             callback('phone already reg');
             return;
         }
+
         if(info.state !== undefined && !IS_USER_STATE(info.state)){
             callback('invalid user state');
             return;
         }
+
         let now = info.now || new Date().getTime();
         
         let keys = `(phone,password,nickname,reg_time`;
-        let values = `('${info.phone}','${info.password}','${info.nickname}',${info.now}`;
+        let values = `('${mysql.escape(info.phone)}','${mysql.escape(info.password)}','${mysql.escape(info.nickname)}',${info.now}`;
         if(info.state !== undefined){
             keys += `,state`;
-            values += `,${info.state}`;
+            values += `,${mysql.escape(info.state)}`;
         }
         if(info.blogin){
             keys += `,last_login_time`;
@@ -129,79 +208,75 @@ class User {
         }
         if(info.email){
             keys += `,email`;
-            values += `,'${info.email}'`;
+            values += `,'${mysql.escape(info.email)}'`;
         }
         if(info.idcard){
             keys += `,idcard`;
-            values += `,'${info.idcard}'`;
+            values += `,'${mysql.escape(info.idcard)}'`;
         }
         if(info.bauth){
             keys += `,auth_time`;
             values += `,'${now}'`;
         }
-        let sql = `insert into ${TABLE_NAME}${keys}) values${values});`
+        let sql = `insert into ${TABLE_NAME}${keys}) values${values});`;
+        let self = this;
         mysql.exec(sql,function(err){
             if(err){
                 callback(`mysql err:${JSON.stringify(err)}`);
                 return;
             }
-            callback();
+            mysql.exec(`select * from ${TABLE_NAME} where phone=${info.phone};`,function(err,res){
+                if(err){
+                    log.warn('user.add for db err:'+JSON.stringify(err)+';sql:'+sql);
+                    self._tochae(info);
+                }else if(!res || !res.length){
+                    log.warn('user.add for db fail:res is null,'+JSON.stringify(res));
+                    self._tochae(info);
+                }else{
+                    self._tochae(res[0]);
+                }
+                callback();
+            });
         });
     }
 
-    update(id,info){
-        if(!id || !this.get(id)){
-            callback('unkown id');
+    update(info){
+        if(!info || !info.phone){
+            callback('missing parmas');
             return;
         }
-        if(!info){
-            callback();
+        let user = this.get(info.phone);
+        if(!user){
+            callback('unkwon phone of user');
             return;
         }
-        // id int auto_increment primary key,
-        // state int default 1,
-        // phone varchar(32) not null,
-        // password varchar(32) not null,
-        // reg_time bigint not null,
-        // last_login_time bigint default 0,
-        // nickname varchar(32) not null,
-        // email varchar(128),
-        // idcard varchar(32),
-        // auth_time bigint default 0
+
         let sql = null;
         let now = info.now || new Date().getTime();
-        if(info.state !== undefined){
+        if(info.state !== undefined && info.state !== user.state){
             if(!IS_USER_STATE(info.state)){
                 callback('invalid user state');
                 return;
             }
             sql = `update ${TABLE_NAME} set state=${info.state}`;
         }
-        if(info.phone){
-            if(this._has_phone(info.phone,id)){
-                callback('phone already reg');
-                return;
-            }
+
+        if(info.phone && info.phone !== user.phone){
             if(!sql){
                 sql = `update ${TABLE_NAME} set phone='${info.phone}'`;
             }else{
                 sql += `,phone='${info.phone}'`;
             }
         }
-        if(info.password){
+
+        if(info.password && info.password !== user.password){
             if(!sql){
                 sql = `update ${TABLE_NAME} set password='${info.password}'`;
             }else{
                 sql += `,password='${info.password}'`;
             }
         }
-        if(info.reg_time){
-            if(!sql){
-                sql = `update ${TABLE_NAME} set reg_time=${now}`;
-            }else{
-                sql += `,reg_time=${now}`;
-            }
-        }
+
         if(info.blogin){
             if(!sql){
                 sql = `update ${TABLE_NAME} set last_login_time=${now}`;
@@ -209,6 +284,54 @@ class User {
                 sql += `,last_login_time=${now}`;
             }
         }
+
+        if(info.nickname && info.nickname !== user.nickname){
+            if(!sql){
+                sql = `update ${TABLE_NAME} set nickname=${info.nickname}`;
+            }else{
+                sql += `,nickname=${info.nickname}`;
+            }
+        }
+
+        if(info.email && info.email !== user.email){
+            if(!sql){
+                sql = `update ${TABLE_NAME} set email=${info.email}`;
+            }else{
+                sql += `,email=${info.email}`;
+            }
+        }
+
+        if(info.idcard && info.idcard !== user.idcard){
+            if(!sql){
+                sql = `update ${TABLE_NAME} set idcard=${info.idcard}`;
+            }else{
+                sql += `,idcard=${info.idcard}`;
+            }
+        }
+        
+        if(!user.auth_time && info.auth_time && info.auth_time !== user.auth_time){
+            if(!sql){
+                sql = `update ${TABLE_NAME} set auth_time=${info.auth_time}`;
+            }else{
+                sql += `,auth_time=${info.auth_time}`;
+            }
+        }
+        
+        if(!sql){
+            callback();
+            return;
+        }
+
+        sql += ` where phone=${info.phone};`
+
+        mysql.exec(sql,function(err){
+            if(err){
+                log.warn(`user.update db err:${JSON.stringify(err)};sql:${sql}`);
+                callback('update fail');
+            }else{
+                callback();
+            }
+        });
     }
 }
 
@@ -216,22 +339,5 @@ var __instance = null;
 if(__instance === null){
     __instance = new User();
 }
-
-let _ = new Map();
-_.set(`/:id`,{
-    get : function(cb,params,body){//浏览
-        // cb(params,err,code);
-        cb(params);
-    },
-    post : function(cb,params,body){//插入
-        cb({test:123});
-    },
-    put : function(cb,params,body){//更新
-        cb(params);
-    },
-    del : function(cb,params,body){//删除
-        cb(params);
-    }
-});
-module.exports = _;
+module.exports = __instance._interface;
 

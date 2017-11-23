@@ -1,5 +1,17 @@
 
 const fs = require('fs');
+
+global.API_HTTP_CODE = {
+    error : 400,
+    success : 200
+};
+
+global.API_CODE = {
+    fail : -1,
+    busy : -10
+};
+
+
 class api {
     constructor(config,done){
         this._dir = config.dir || "./apis";
