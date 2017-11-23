@@ -1,7 +1,7 @@
 
 const mysql = require('mysql');
 class mysql_pool {
-	constructor(config,log){
+	constructor(config){
 		this._pool = mysql.createPool({
 			host			:	config.host,
 			port			:	config.port,
@@ -9,17 +9,15 @@ class mysql_pool {
 			password 		: 	config.password,
 			database		: 	config.database
 		});
-		this.log = log?log:null;
 	}
 	exec(sql,callback){
-		let self = this;
 		this._pool.getConnection(function(err,conn){
 			if(err){
-				if(self.log){
-					self.log.warn('mysql pool get conn err:'+JSON.stringify(err));
-				}else{
-					console.log('mysql pool get conn err:'+JSON.stringify(err));
+				callback(err);
+				if(conn){
+					conn.release();
 				}
+				return;
 			}
 			conn.query(/*'select * from play_fluency where user_id=1011'*/sql,function(err,res){
 				conn.release();
@@ -39,9 +37,9 @@ class mysql_pool {
 }
 
 var _instance = null;
-module.exports = function(config,log){
+module.exports = function(config){
 	if(_instance === null){
-		_instance = new mysql_pool(config,log);
+		_instance = new mysql_pool(config);
 	}
 	return _instance;
 };
